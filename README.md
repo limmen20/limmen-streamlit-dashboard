@@ -3,7 +3,7 @@
 Project work for IND320 *Data to Decision*: Norwegian hydropower reservoir data
 in a Jupyter Notebook and a Streamlit app.
 
-- Streamlit app: https://limmen-streamlit-dashboard.streamlit.app/
+- Streamlit app: https://limmen-app-dashboard.streamlit.app/
 - Notebook: [IND320_part1.ipynb](IND320_part1.ipynb)
 
 ## Structure
