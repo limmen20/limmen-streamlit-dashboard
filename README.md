@@ -1,25 +1,32 @@
 # limmen-streamlit-dashboard
 
-Project work for IND320 *Data to Decision*: Norwegian hydropower reservoir data
-in a Jupyter Notebook and a Streamlit app.
+Project work for IND320 *Data to Decision*: Norwegian hydropower reservoirs and cross-border
+electricity flows, in Jupyter Notebooks and a Streamlit app.
 
-- Streamlit app: https://limmen-app-dashboard.streamlit.app/
-- Notebook: [IND320_part1.ipynb](IND320_part1.ipynb)
+- Streamlit app (part 1): https://limmen-app-dashboard.streamlit.app/
+- Streamlit app (part 2): https://limmen-app-dashboard-part2.streamlit.app/
+- Notebooks: [notebooks/](notebooks/)
 
 ## Structure
 
 | File | Content |
 |---|---|
 | `Home.py` | Front page of the app (entry point, sidebar menu) |
-| `pages/1_Data_table.py` | Table with one row per data column and a line chart of the first month |
-| `pages/2_Plot.py` | Plot with column drop-down and month range slider |
-| `pages/3_Coming_soon.py` | Placeholder page |
-| `utils.py` | Cached data loading and shared settings |
-| `data/reservoirs.csv` | Weekly reservoir data (from the course material) |
+| `pages/1_Reservoirs.py` | Reservoir plot and table from the NVE Magasinstatistikk API |
+| `pages/2_Cross_border_flows.py` | Cross-border flows from MongoDB: pie chart and line plot |
+| `utils.py` | Cached API and MongoDB access, shared settings |
+| `notebooks/` | Jupyter Notebooks for each part of the project |
 
 ## Run locally
 
 ```bash
 pip install -r requirements.txt
 streamlit run Home.py
+```
+
+The app expects a MongoDB connection string in `.streamlit/secrets.toml` (not included in the repository):
+
+```toml
+[mongo]
+uri = "mongodb+srv://..."
 ```
