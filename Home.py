@@ -1,16 +1,14 @@
-"""IND320 - Data to Decision: Streamlit app (home page).
+"""IND320 - home page of the Streamlit app.
 
 Run locally with:  streamlit run Home.py
-
-This is the entry point of a multipage app. Streamlit automatically finds the
-files in the `pages/` folder and lists them in the sidebar menu.
+Streamlit finds the files in pages/ by itself and puts them in the sidebar menu.
 """
 
 import streamlit as st
 
 from utils import fetch_latest_week
 
-# Page settings (browser tab title, wide layout). Must be the first Streamlit call.
+# Has to be the first Streamlit command on the page
 st.set_page_config(page_title="IND320 Energy dashboard", layout="wide")
 
 st.title("Norwegian hydropower and power exchange")
@@ -20,7 +18,7 @@ st.write(
     "stored in a MongoDB database."
 )
 
-# Key numbers from the latest published week (small API call, cached in utils.py)
+# A few numbers from the newest week
 latest = fetch_latest_week()
 norway = latest[latest["area_type"] == "NO"].iloc[0]
 col1, col2, col3 = st.columns(3)

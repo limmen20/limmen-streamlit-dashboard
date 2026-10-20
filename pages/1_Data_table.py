@@ -1,8 +1,7 @@
-"""Page 2: table of the reservoir data from the NVE API.
+"""Page 2: reservoir table.
 
-The area type (radio buttons) and the download interval (slider) are chosen in the sidebar and
-shared with the Plot page. The table has one row per area number, and the row-wise
-LineChartColumn draws the weekly values of each area as a small line chart.
+Area type and period are picked in the sidebar (shared with the Plot page).
+One row per area, and LineChartColumn draws the weekly values in each row.
 """
 
 import streamlit as st
@@ -12,8 +11,8 @@ from utils import AREA_TYPES, fetch_reservoirs, reservoir_controls
 st.set_page_config(page_title="Data table", layout="wide")
 st.title("Data table")
 
-area_type, start, end = reservoir_controls()   # sidebar: radio + download interval slider
-df = fetch_reservoirs(start, end)              # cached API download for the chosen interval
+area_type, start, end = reservoir_controls()   # radio + slider in the sidebar
+df = fetch_reservoirs(start, end)
 data = df[df["area_type"] == area_type]
 if data.empty:
     st.warning("No data published for the chosen interval yet.")
@@ -22,7 +21,7 @@ period = start if start == end else f"{start} to {end}"
 
 st.write(f"Weekly values for **{AREA_TYPES[area_type]}**, {period}. One row per area.")
 
-# One row per area number; the weekly values are collected as lists for LineChartColumn
+# One row per area. The weekly values are put in lists, which LineChartColumn can draw
 table = (
     data.groupby("area", sort=False)
     .agg(
@@ -48,7 +47,6 @@ st.dataframe(
     },
 )
 
-# The downloaded rows themselves, for the chosen area type
 with st.expander("Show the downloaded rows"):
     st.dataframe(data, hide_index=True, width="stretch")
 st.caption("Source: NVE Magasinstatistikk API (biapi.nve.no/magasinstatistikk).")

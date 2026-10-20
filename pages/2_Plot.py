@@ -1,9 +1,7 @@
-"""Page 3: interactive plot of the reservoir data from the NVE API.
+"""Page 3: reservoir plot.
 
-- Sidebar (shared with the Data table page): radio buttons for the area type and a slider
-  that controls which months are downloaded.
-- st.selectbox chooses a single column or all columns together.
-The plot shows one line per area number of the chosen area type.
+Area type and period are picked in the sidebar (shared with the Data table page).
+The selectbox picks one column or all columns. One line per area.
 """
 
 import plotly.express as px
@@ -15,7 +13,7 @@ from utils import (AREA_COLORS, AREA_TYPES, COLUMN_COLORS, RATIO_COLUMNS, VALUE_
 st.set_page_config(page_title="Plot", layout="wide")
 st.title("Plot of reservoir data")
 
-area_type, start, end = reservoir_controls()   # sidebar: radio + download interval slider
+area_type, start, end = reservoir_controls()   # radio + slider in the sidebar
 df = fetch_reservoirs(start, end)
 data = df[df["area_type"] == area_type]
 if data.empty:
@@ -27,14 +25,14 @@ ALL = "All columns"
 choice = st.selectbox(
     "Column",
     [ALL] + list(VALUE_COLUMNS.keys()),
-    index=1,   # filling ratio
+    index=1,   # start with the filling ratio
     format_func=lambda c: c if c == ALL else VALUE_COLUMNS[c],
 )
-few_points = data["date"].nunique() <= 30   # markers only when there are few weeks
+few_points = data["date"].nunique() <= 30   # only show markers when there are few weeks
 
 if choice == ALL:
-    # The columns have very different scales (fractions vs. TWh), so each column is divided
-    # by its largest absolute value per area. One small plot per area, all columns on one axis.
+    # Ratios (0-1) and TWh don't fit on the same axis, so each column is divided by
+    # its max (like in part 1). One small plot per area.
     scaled = data[["date", "area"]].copy()
     for col, label in VALUE_COLUMNS.items():
         scaled[label] = data[col] / data.groupby("area")[col].transform(lambda s: s.abs().max())
@@ -49,11 +47,11 @@ if choice == ALL:
         height=250 + 220 * n_areas,
     )
     fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))   # "area=NO1" -> "NO1"
+    # Stored energy = filling ratio x capacity, so the lines overlap. Dashed so both show
     fig.update_traces(line_dash="dash", selector={"name": VALUE_COLUMNS["filling_TWh"]})
     st.caption("Each column is divided by its maximum, so columns with different units share one axis. "
                "Stored energy (dashed) lies on top of the filling ratio.")
 else:
-    # One line per area number of the chosen area type
     fig = px.line(
         data, x="date", y=choice, color="area",
         markers=few_points,
@@ -62,9 +60,9 @@ else:
         labels={"date": "Date", choice: VALUE_COLUMNS[choice], "area": "Area"},
     )
     if choice in RATIO_COLUMNS:
-        fig.update_yaxes(tickformat=".0%")   # show fractions as percentages
+        fig.update_yaxes(tickformat=".0%")
 
-fig.update_layout(hovermode="x unified")
+fig.update_layout(hovermode="x unified")   # one tooltip for all lines at a date
 fig.update_traces(line_width=2)
 st.plotly_chart(fig, width="stretch")
 st.caption("Source: NVE Magasinstatistikk API (biapi.nve.no/magasinstatistikk).")

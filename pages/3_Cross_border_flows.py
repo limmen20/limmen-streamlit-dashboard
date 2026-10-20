@@ -1,9 +1,8 @@
-"""Page 4: cross-border flows - electricity flowing into and out of Norway, read from MongoDB.
+"""Page 4: cross-border flows in and out of Norway, read from MongoDB.
 
-The page is split in two columns with st.columns:
-- left: st.radio chooses the connection and st.selectbox the year -> pie chart (in vs. out)
-- right: st.pills chooses the months -> line plot with one line per connection and direction
-An st.expander below the columns documents where the data come from.
+Left column: radio for connection + selectbox for year -> pie chart.
+Right column: pills for months -> line plot per connection and direction.
+Expander at the bottom says where the data comes from.
 """
 
 import calendar
@@ -17,7 +16,7 @@ st.set_page_config(page_title="Cross-border flows", layout="wide")
 st.title("Cross-border flows")
 
 try:
-    flows = load_flows()   # daily totals per connection and direction (cached MongoDB query)
+    flows = load_flows()   # daily values from MongoDB (cached)
 except Exception as error:
     st.error("Could not read the data from MongoDB. Check the connection string in the app's secrets "
              f"and the IP access list in MongoDB Atlas. ({type(error).__name__})")
@@ -25,15 +24,16 @@ except Exception as error:
 if flows.empty:
     st.warning("The MongoDB collection is empty. Run the part 2 notebook to fill it.")
     st.stop()
+
 connections = [c for c in CONNECTION_COLORS if c in set(flows["connection"])]
 years = sorted(flows["year"].unique())
 
 left, right = st.columns(2)
 
-# --- Left: pie chart for one connection and one year ---------------------------------------
+# Left: pie chart for one connection and one year
 with left:
     connection = st.radio("Connection", connections, horizontal=True)
-    year = st.selectbox("Year", years, index=years.index(2025) if 2025 in years else 0)
+    year = st.selectbox("Year", years, index=years.index(2025) if 2025 in years else 0)  # 2025 = only full year
 
     totals = (flows[(flows["connection"] == connection) & (flows["year"] == year)]
               .groupby("direction", as_index=False)["gwh"].sum())
@@ -46,21 +46,22 @@ with left:
         texttemplate="%{label}<br>%{value:,.0f} GWh (%{percent})",
         marker_line_color="white", marker_line_width=2, sort=False,
     )
-    fig.update_layout(showlegend=False)
+    fig.update_layout(showlegend=False)   # the labels are on the pie already
     st.plotly_chart(fig, width="stretch")
 
-# --- Right: line plot for any set of months in the chosen year -----------------------------
+# Right: line plot for any months in the chosen year
 with right:
     year_flows = flows[flows["year"] == year]
     available = sorted(year_flows["month"].unique())
     chosen = st.pills(
         "Months", available, selection_mode="multi",
-        default=[available[0]], format_func=lambda m: calendar.month_abbr[m],
+        default=[available[0]], format_func=lambda m: calendar.month_abbr[m],   # 1 -> "Jan"
     )
     if not chosen:
         st.info("Choose at least one month.")
     else:
         data = year_flows[year_flows["month"].isin(chosen)].sort_values("date")
+        # Colour = connection, line style = direction
         fig = px.line(
             data, x="date", y="gwh",
             color="connection", line_dash="direction",
@@ -71,13 +72,13 @@ with right:
                     "connection": "Connection", "direction": "Direction"},
         )
         fig.update_traces(line_width=2)
-        # 12 legend entries: put the legend below the plot so the lines get the full width
+        # 12 legend entries, so the legend goes below the plot
         fig.update_layout(height=600, legend=dict(orientation="h", y=-0.2, yanchor="top", x=0, title_text=""))
         st.plotly_chart(fig, width="stretch")
         st.caption("Solid = into Norway, dashed = out of Norway. "
                    "Click a legend entry to hide a line, double-click to show only that line.")
 
-# --- Documentation of the data source -------------------------------------------------------
+# Where the data comes from
 with st.expander("About the data on this page"):
     st.markdown(
         f"""
