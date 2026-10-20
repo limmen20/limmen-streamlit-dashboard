@@ -18,8 +18,9 @@ st.title("Cross-border flows")
 
 try:
     flows = load_flows()   # daily totals per connection and direction (cached MongoDB query)
-except Exception:
-    st.error("Could not read the data from MongoDB. Check the connection string in the app's secrets.")
+except Exception as error:
+    st.error("Could not read the data from MongoDB. Check the connection string in the app's secrets "
+             f"and the IP access list in MongoDB Atlas. ({type(error).__name__})")
     st.stop()
 if flows.empty:
     st.warning("The MongoDB collection is empty. Run the part 2 notebook to fill it.")
