@@ -70,6 +70,8 @@ with right:
                     "connection": "Connection", "direction": "Direction"},
         )
         fig.update_traces(line_width=2)
+        # 12 legend entries: put the legend below the plot so the lines get the full width
+        fig.update_layout(height=600, legend=dict(orientation="h", y=-0.2, yanchor="top", x=0, title_text=""))
         st.plotly_chart(fig, width="stretch")
         st.caption("Solid = into Norway, dashed = out of Norway. "
                    "Click a legend entry to hide a line, double-click to show only that line.")
