@@ -31,7 +31,11 @@ col3.metric("Week", f"{norway['iso_week']} / {norway['iso_year']}")
 
 st.subheader("Pages")
 st.markdown(
-    "- **Reservoirs** - choose area type and period; plot and table with one line per area.\n"
-    "- **Cross-border flows** - flows into and out of Norway per connection (from MongoDB)."
+    "- **Data table** - one row per area, with small line charts of the weekly values.\n"
+    "- **Plot** - one line per area for a chosen column (or all columns).\n"
+    "- **Cross-border flows** - flows into and out of Norway per connection (from MongoDB).\n"
+    "- **Coming soon** - placeholder page for later parts of the project.\n\n"
+    "On the Data table and Plot pages, the area type and the download interval are chosen in "
+    "the sidebar and shared between the two pages."
 )
 st.info("Use the menu in the sidebar to navigate between the pages.")

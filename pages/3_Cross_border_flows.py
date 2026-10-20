@@ -1,4 +1,4 @@
-"""Cross-border flows: electricity flowing into and out of Norway, read from MongoDB.
+"""Page 4: cross-border flows - electricity flowing into and out of Norway, read from MongoDB.
 
 The page is split in two columns with st.columns:
 - left: st.radio chooses the connection and st.selectbox the year -> pie chart (in vs. out)
@@ -16,7 +16,14 @@ from utils import CONNECTION_COLORS, DIRECTION_COLORS, EXPORT, IMPORT, load_flow
 st.set_page_config(page_title="Cross-border flows", layout="wide")
 st.title("Cross-border flows")
 
-flows = load_flows()   # daily totals per connection and direction (cached MongoDB query)
+try:
+    flows = load_flows()   # daily totals per connection and direction (cached MongoDB query)
+except Exception:
+    st.error("Could not read the data from MongoDB. Check the connection string in the app's secrets.")
+    st.stop()
+if flows.empty:
+    st.warning("The MongoDB collection is empty. Run the part 2 notebook to fill it.")
+    st.stop()
 connections = [c for c in CONNECTION_COLORS if c in set(flows["connection"])]
 years = sorted(flows["year"].unique())
 

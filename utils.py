@@ -38,6 +38,15 @@ VALUE_COLUMNS = {
 }
 RATIO_COLUMNS = ["filling_ratio", "filling_ratio_prev_week", "filling_ratio_change"]
 
+# One fixed colour per column, so a column keeps its colour on every plot
+COLUMN_COLORS = {
+    "filling_ratio": "#2a78d6",
+    "filling_ratio_prev_week": "#eb6834",
+    "filling_ratio_change": "#1baf7a",
+    "filling_TWh": "#eda100",
+    "capacity_TWh": "#e87ba4",
+}
+
 # Area types in the NVE data
 AREA_TYPES = {
     "NO": "NO - whole country",
@@ -67,6 +76,29 @@ def area_label(area_type: str, area_number: int) -> str:
 def month_options() -> list[str]:
     """All months from the start of the statistics (January 1995) to the current month."""
     return pd.period_range("1995-01", pd.Timestamp.today(), freq="M").astype(str).tolist()
+
+
+def reservoir_controls() -> tuple[str, str, str]:
+    """Sidebar controls shared by the Data table and Plot pages.
+
+    - st.radio chooses the area type (NO, EL or VASS).
+    - st.select_slider chooses the months to download (default: the last two years).
+    The choices are kept when the user switches between the two pages.
+    """
+    months = month_options()
+    # Last choices (stored in session state, which is kept when the user changes page)
+    saved_type = st.session_state.get("saved_area_type", "NO")
+    saved_interval = st.session_state.get("saved_interval", (months[-24], months[-1]))
+
+    st.sidebar.header("Reservoir data")
+    area_type = st.sidebar.radio("Area type", list(AREA_TYPES), index=list(AREA_TYPES).index(saved_type),
+                                 format_func=AREA_TYPES.get)
+    # A tuple as value makes it a range slider (from, to)
+    start, end = st.sidebar.select_slider("Download interval (months)", options=months, value=saved_interval)
+
+    st.session_state["saved_area_type"] = area_type
+    st.session_state["saved_interval"] = (start, end)
+    return area_type, start, end
 
 
 @st.cache_data(ttl=3600, show_spinner="Downloading reservoir data from NVE ...")
@@ -99,7 +131,7 @@ def fetch_latest_week() -> pd.DataFrame:
 @st.cache_resource  # one database connection shared by all users and reruns
 def mongo_client() -> MongoClient:
     """Connect to MongoDB. The connection string is stored in Streamlit secrets, not on GitHub."""
-    return MongoClient(st.secrets["mongo"]["uri"])
+    return MongoClient(st.secrets["mongo"]["uri"], serverSelectionTimeoutMS=10000)
 
 
 @st.cache_data(ttl=600, show_spinner="Reading cross-border flows from MongoDB ...")
@@ -107,5 +139,6 @@ def load_flows() -> pd.DataFrame:
     """Daily cross-border flows (GWh) per connection and direction, as stored by the notebook."""
     collection = mongo_client()["ind320"]["cross_border_flows_daily"]
     df = pd.DataFrame(list(collection.find({}, {"_id": 0})))
-    df["date"] = pd.to_datetime(df["date"])
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"])
     return df
