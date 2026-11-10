@@ -1,4 +1,4 @@
-"""Page 3: reservoir plot.
+"""Reservoirs - plot.
 
 Area type and period are picked in the sidebar (shared with the Data table page).
 The selectbox picks one column or all columns. One line per area.
@@ -10,7 +10,6 @@ import streamlit as st
 from utils import (AREA_COLORS, AREA_TYPES, COLUMN_COLORS, RATIO_COLUMNS, VALUE_COLUMNS,
                    fetch_reservoirs, reservoir_controls)
 
-st.set_page_config(page_title="Plot", layout="wide")
 st.title("Plot of reservoir data")
 
 area_type, start, end = reservoir_controls()   # radio + slider in the sidebar

@@ -1,4 +1,4 @@
-"""Page 5: placeholder page with dummy content (moved from page 4 in part 2).
+"""Placeholder page with dummy content (for the last part of the project).
 
 This page will be filled in later parts of the project
 (e.g. further analysis of the data).
@@ -6,7 +6,6 @@ This page will be filled in later parts of the project
 
 import streamlit as st
 
-st.set_page_config(page_title="Coming soon", layout="wide")
 st.title("Coming soon")
 
 st.write("This page is a placeholder for later parts of the IND320 project.")

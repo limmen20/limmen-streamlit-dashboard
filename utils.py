@@ -1,9 +1,11 @@
 """Helper functions shared by the pages.
 
-Reservoir data comes from the NVE API (no more CSV file), and the cross-border
-flows come from MongoDB, where the notebook saved them.
+Reservoir data comes from the NVE API (no more CSV file), the cross-border flows and
+the weather locations come from MongoDB (saved there by the notebooks), and the weather
+itself is downloaded from open-meteo.
 """
 
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -93,6 +95,35 @@ def reservoir_controls() -> tuple[str, str, str]:
     return area_type, start, end
 
 
+AREA_NUMBERS = {"NO": [0], "EL": [1, 2, 3, 4, 5], "VASS": [1, 2, 3]}
+
+
+def area_controls() -> tuple[str, int]:
+    """Sidebar: area type + one area. Used by the analysis and weather pages.
+
+    It uses the same saved area type as the other reservoir pages, so the choice follows you around.
+    """
+    saved_type = st.session_state.get("saved_area_type", "NO")
+    st.sidebar.header("Area")
+    area_type = st.sidebar.radio("Area type", list(AREA_TYPES), index=list(AREA_TYPES).index(saved_type),
+                                 format_func=AREA_TYPES.get)
+    numbers = AREA_NUMBERS[area_type]
+    saved_number = st.session_state.get("saved_area_number", numbers[0])
+    number = st.sidebar.selectbox("Area", numbers, index=numbers.index(saved_number) if saved_number in numbers else 0,
+                                  format_func=lambda n: area_label(area_type, n))
+
+    st.session_state["saved_area_type"] = area_type
+    st.session_state["saved_area_number"] = number
+    return area_type, number
+
+
+def region_code(area_type: str, area_number: int) -> str:
+    """Region name used for the weather locations in MongoDB: NO, NO1-NO5 or VASS1-VASS3."""
+    if area_type == "NO":
+        return "NO"
+    return f"NO{area_number}" if area_type == "EL" else f"VASS{area_number}"
+
+
 @st.cache_data(ttl=3600, show_spinner="Downloading reservoir data from NVE ...")
 def fetch_reservoirs(start_month: str, end_month: str) -> pd.DataFrame:
     """Download the reservoir data for the chosen months.
@@ -134,3 +165,49 @@ def load_flows() -> pd.DataFrame:
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"])
     return df
+
+
+# --- Weather (open-meteo, ERA5) ---------------------------------------------------------------
+ARCHIVE_API = "https://archive-api.open-meteo.com/v1/archive"
+HOURLY_VARIABLES = ["temperature_2m", "precipitation", "rain", "snowfall", "relative_humidity_2m",
+                    "wind_speed_10m", "wind_gusts_10m", "cloud_cover", "surface_pressure"]
+N_LOCATIONS = 5   # random locations per download (the free API limits how much we can download)
+
+
+@st.cache_data(ttl=24 * 3600)
+def load_locations() -> dict[str, list]:
+    """The 1000 random [lon, lat] locations per region, sampled in the part 3 notebook."""
+    docs = mongo_client()["ind320"]["region_locations"].find({}, {"_id": 0})
+    return {doc["region"]: doc["locations"] for doc in docs}
+
+
+@st.cache_data(ttl=24 * 3600, show_spinner="Downloading weather data from open-meteo ...")
+def download_weather(region: str, start: str, end: str, n_locations: int = N_LOCATIONS, seed: int = 1):
+    """Hourly ERA5 weather for random locations in a region (same function as in the notebook).
+
+    The download happens in the background when a page needs it, and is cached for a day,
+    so there is no separate download page.
+    """
+    pairs = load_locations()[region]
+    rng = np.random.default_rng(seed)
+    chosen = [pairs[i] for i in rng.choice(len(pairs), size=n_locations, replace=False)]
+    params = {
+        "latitude": ",".join(str(lat) for lon, lat in chosen),
+        "longitude": ",".join(str(lon) for lon, lat in chosen),
+        "start_date": start, "end_date": end,
+        "hourly": ",".join(HOURLY_VARIABLES), "models": "era5", "timezone": "GMT",
+    }
+    response = requests.get(ARCHIVE_API, params=params, timeout=120)
+    response.raise_for_status()
+    results = response.json()
+    if isinstance(results, dict):   # one location -> a dict, several -> a list
+        results = [results]
+
+    frames = []
+    for i, (result, (lon, lat)) in enumerate(zip(results, chosen)):
+        frame = pd.DataFrame(result["hourly"])
+        frame["location"], frame["longitude"], frame["latitude"] = i, lon, lat
+        frames.append(frame)
+    weather = pd.concat(frames, ignore_index=True)
+    weather["time"] = pd.to_datetime(weather["time"])
+    return weather

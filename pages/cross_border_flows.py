@@ -1,7 +1,7 @@
-"""Page 4: cross-border flows in and out of Norway, read from MongoDB.
+"""Power exchange - cross-border flows in and out of Norway, read from MongoDB.
 
 Left column: radio for connection + selectbox for year -> pie chart.
-Right column: pills for months -> line plot per connection and direction.
+Right column: pills for months + filter for connections -> line plot per connection and direction.
 Expander at the bottom says where the data comes from.
 """
 
@@ -12,7 +12,6 @@ import streamlit as st
 
 from utils import CONNECTION_COLORS, DIRECTION_COLORS, EXPORT, IMPORT, load_flows
 
-st.set_page_config(page_title="Cross-border flows", layout="wide")
 st.title("Cross-border flows")
 
 try:
@@ -57,10 +56,12 @@ with right:
         "Months", available, selection_mode="multi",
         default=[available[0]], format_func=lambda m: calendar.month_abbr[m],   # 1 -> "Jan"
     )
-    if not chosen:
-        st.info("Choose at least one month.")
+    # Filter for the line plot (feedback from part 2): show only some connections
+    shown = st.multiselect("Connections in the line plot", connections, default=connections)
+    if not chosen or not shown:
+        st.info("Choose at least one month and one connection.")
     else:
-        data = year_flows[year_flows["month"].isin(chosen)].sort_values("date")
+        data = year_flows[year_flows["month"].isin(chosen) & year_flows["connection"].isin(shown)].sort_values("date")
         # Colour = connection, line style = direction
         fig = px.line(
             data, x="date", y="gwh",
@@ -72,7 +73,7 @@ with right:
                     "connection": "Connection", "direction": "Direction"},
         )
         fig.update_traces(line_width=2)
-        # 12 legend entries, so the legend goes below the plot
+        # Up to 12 legend entries, so the legend goes below the plot
         fig.update_layout(height=600, legend=dict(orientation="h", y=-0.2, yanchor="top", x=0, title_text=""))
         st.plotly_chart(fig, width="stretch")
         st.caption("Solid = into Norway, dashed = out of Norway. "

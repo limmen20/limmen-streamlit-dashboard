@@ -1,4 +1,4 @@
-"""Page 2: reservoir table.
+"""Reservoirs - data table.
 
 Area type and period are picked in the sidebar (shared with the Plot page).
 One row per area, and LineChartColumn draws the weekly values in each row.
@@ -8,7 +8,6 @@ import streamlit as st
 
 from utils import AREA_TYPES, fetch_reservoirs, reservoir_controls
 
-st.set_page_config(page_title="Data table", layout="wide")
 st.title("Data table")
 
 area_type, start, end = reservoir_controls()   # radio + slider in the sidebar
