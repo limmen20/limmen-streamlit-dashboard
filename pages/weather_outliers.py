@@ -26,7 +26,9 @@ except requests.HTTPError as error:
              "The free API has a daily limit, so try again later.")
     st.stop()
 except Exception as error:
-    st.error(f"Could not get the weather data ({type(error).__name__}).")
+    # The locations come from MongoDB, so a connection problem there also ends up here
+    st.error(f"Could not get the weather data ({type(error).__name__}). The locations are read from MongoDB, "
+             "so check the connection string in the app's secrets and the IP access list in MongoDB Atlas.")
     st.stop()
 
 weather = hourly.groupby("time")[HOURLY_VARIABLES].mean()   # region average per hour
