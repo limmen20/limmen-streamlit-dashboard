@@ -6,3 +6,7 @@ pymongo>=4.6
 scipy>=1.11
 scikit-learn>=1.4
 statsmodels>=0.14
+river>=0.21
+folium>=0.17
+streamlit-folium>=0.22
+shapely>=2.0

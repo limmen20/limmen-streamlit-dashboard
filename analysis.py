@@ -1,7 +1,7 @@
 """Analysis functions for the app (same methods as in the part 3 notebook, but with Plotly plots).
 
-- spc_precipitation: outliers in precipitation with DCT high-pass + SPC limits (robust statistics)
-- lof_temperature:   anomalies in temperature with Local Outlier Factor
+- spc_outliers:  outliers in a weather property with DCT high-pass + SPC limits (robust statistics)
+- lof_anomalies: anomalies in a weather property with Local Outlier Factor
 - stl_figure:        STL decomposition of the reservoir filling ratio
 - spectrogram_figure: spectrogram of the reservoir filling ratio
 """
@@ -18,16 +18,17 @@ from statsmodels.tsa.seasonal import STL
 LINE, LIMIT, OUTLIER = "#2a78d6", "#eb6834", "#e34948"
 
 
-def spc_precipitation(precip: pd.Series, freq_cutoff: float = 1 / 30, n_std: float = 3.0):
-    """Outliers in precipitation with Statistical Process Control.
+def spc_outliers(series: pd.Series, label: str, freq_cutoff: float = 1 / 30, n_std: float = 3.0):
+    """Outliers in a weather property with Statistical Process Control (SPC).
 
     The DCT high-pass removes variations slower than freq_cutoff (cycles per day), which gives the
     seasonally adjusted variations (SATV). Limits = median(SATV) +- n_std * robust std (from MAD),
     put back on the slow part so they follow the season. SATV itself is not plotted.
+    label: name and unit of the property, used in the plot (e.g. "Temperature (°C)").
     """
-    x = precip.to_numpy(dtype=float)
+    x = series.to_numpy(dtype=float)
     n = len(x)
-    step_days = (precip.index[1] - precip.index[0]) / pd.Timedelta(days=1)   # 1/24 for hourly data
+    step_days = (series.index[1] - series.index[0]) / pd.Timedelta(days=1)   # 1/24 for hourly data
 
     coeffs = dct(x, norm="ortho")
     freq = np.arange(n) / (2 * n * step_days)    # frequency of each DCT component, cycles per day
@@ -41,53 +42,56 @@ def spc_precipitation(precip: pd.Series, freq_cutoff: float = 1 / 30, n_std: flo
     lower = slow + center - n_std * sigma
     is_out = (satv > center + n_std * sigma) | (satv < center - n_std * sigma)
 
+    name = label.split(" (")[0]
     fig = go.Figure()
-    fig.add_trace(go.Scattergl(x=precip.index, y=x, name="Precipitation", line=dict(color=LINE, width=1)))
-    fig.add_trace(go.Scattergl(x=precip.index, y=upper, name="Upper SPC limit", line=dict(color=LIMIT, width=1.5, dash="dash")))
-    fig.add_trace(go.Scattergl(x=precip.index, y=lower, name="Lower SPC limit", line=dict(color=LIMIT, width=1.5, dash="dot")))
-    fig.add_trace(go.Scattergl(x=precip.index[is_out], y=x[is_out], name="Outliers", mode="markers",
+    fig.add_trace(go.Scattergl(x=series.index, y=x, name=name, line=dict(color=LINE, width=1)))
+    fig.add_trace(go.Scattergl(x=series.index, y=upper, name="Upper SPC limit", line=dict(color=LIMIT, width=1.5, dash="dash")))
+    fig.add_trace(go.Scattergl(x=series.index, y=lower, name="Lower SPC limit", line=dict(color=LIMIT, width=1.5, dash="dot")))
+    fig.add_trace(go.Scattergl(x=series.index[is_out], y=x[is_out], name="Outliers", mode="markers",
                                marker=dict(color=OUTLIER, size=5)))
-    fig.update_layout(title=f"Precipitation with SPC limits ({is_out.sum()} outliers)",
-                      xaxis_title="Time (UTC)", yaxis_title="Precipitation (mm per hour)",
+    fig.update_layout(title=f"{name} with SPC limits ({is_out.sum()} outliers)",
+                      xaxis_title="Time (UTC)", yaxis_title=label,
                       hovermode="x unified", legend=dict(orientation="h", y=-0.2))
 
-    outliers = pd.DataFrame({"time": precip.index[is_out], "precipitation_mm": x[is_out],
-                             "upper_limit_mm": upper[is_out],
+    outliers = pd.DataFrame({"time": series.index[is_out], "value": x[is_out],
+                             "lower_limit": lower[is_out], "upper_limit": upper[is_out],
                              "side": np.where(satv[is_out] > center, "above", "below")})
     summary = {"hours": n, "outliers": int(is_out.sum()), "share": float(is_out.mean()),
                "above": int((satv > center + n_std * sigma).sum()), "below": int((satv < center - n_std * sigma).sum()),
-               "robust_std": float(sigma), "largest_mm": float(x[is_out].max()) if is_out.any() else None}
+               "robust_std": float(sigma)}
     return fig, summary, outliers
 
 
-def lof_temperature(temp: pd.Series, contamination: float = 0.01, n_neighbors: int = 100, window_days: int = 30):
-    """Temperature anomalies with Local Outlier Factor (contamination = share of outliers).
+def lof_anomalies(series: pd.Series, label: str, contamination: float = 0.01, n_neighbors: int = 100,
+                  window_days: int = 30):
+    """Anomalies in a weather property with Local Outlier Factor (contamination = share of outliers).
 
     LOF is run on the deviation from a moving average over window_days, so an anomaly is an hour
-    that is unusually warm or cold for the time of year. With only 20 neighbours LOF also marked
-    ordinary values in small gaps, so the default is 100.
+    that is unusual for the time of year. With only 20 neighbours LOF also marked ordinary values in
+    small gaps, so the default is 100.
     """
-    x = temp.to_numpy(dtype=float)
-    seasonal = temp.rolling(f"{window_days}D", center=True, min_periods=1).mean().to_numpy()
+    x = series.to_numpy(dtype=float)
+    seasonal = series.rolling(f"{window_days}D", center=True, min_periods=1).mean().to_numpy()
     deviation = x - seasonal
     lof = LocalOutlierFactor(n_neighbors=n_neighbors, contamination=contamination)
     is_out = lof.fit_predict(deviation.reshape(-1, 1)) == -1   # -1 = outlier
     scores = -lof.negative_outlier_factor_                     # higher = more unusual
 
+    name = label.split(" (")[0]
     fig = go.Figure()
-    fig.add_trace(go.Scattergl(x=temp.index, y=x, name="Temperature", line=dict(color=LINE, width=1)))
-    fig.add_trace(go.Scattergl(x=temp.index, y=seasonal, name=f"{window_days}-day mean", line=dict(color="grey", width=1.5)))
-    fig.add_trace(go.Scattergl(x=temp.index[is_out], y=x[is_out], name="Anomalies (LOF)", mode="markers",
+    fig.add_trace(go.Scattergl(x=series.index, y=x, name=name, line=dict(color=LINE, width=1)))
+    fig.add_trace(go.Scattergl(x=series.index, y=seasonal, name=f"{window_days}-day mean", line=dict(color="grey", width=1.5)))
+    fig.add_trace(go.Scattergl(x=series.index[is_out], y=x[is_out], name="Anomalies (LOF)", mode="markers",
                                marker=dict(color=OUTLIER, size=5)))
-    fig.update_layout(title=f"Temperature with LOF anomalies ({is_out.sum()} anomalies)",
-                      xaxis_title="Time (UTC)", yaxis_title="Temperature (°C)",
+    fig.update_layout(title=f"{name} with LOF anomalies ({is_out.sum()} anomalies)",
+                      xaxis_title="Time (UTC)", yaxis_title=label,
                       hovermode="x unified", legend=dict(orientation="h", y=-0.2))
 
-    outliers = pd.DataFrame({"time": temp.index[is_out], "temperature_C": x[is_out],
-                             "deviation_C": deviation[is_out].round(1), "lof_score": scores[is_out]})
+    outliers = pd.DataFrame({"time": series.index[is_out], "value": x[is_out],
+                             "deviation": deviation[is_out].round(2), "lof_score": scores[is_out]})
     summary = {"hours": len(x), "anomalies": int(is_out.sum()), "share": float(is_out.mean()),
-               "warmer": int((deviation[is_out] > 0).sum()), "colder": int((deviation[is_out] < 0).sum()),
-               "largest_deviation_C": float(np.abs(deviation[is_out]).max()) if is_out.any() else None}
+               "higher": int((deviation[is_out] > 0).sum()), "lower": int((deviation[is_out] < 0).sum()),
+               "largest_deviation": float(np.abs(deviation[is_out]).max()) if is_out.any() else None}
     return fig, summary, outliers.sort_values("lof_score", ascending=False)
 
 
