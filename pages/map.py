@@ -94,7 +94,7 @@ def style(feature):
 
 
 # Dark grey basemap from Esri (no API key needed), to match the dark app theme
-m = folium.Map(location=[65, 15], zoom_start=4, tiles=None)
+m = folium.Map(location=[65, 15], zoom_start=4, tiles=None, zoom_control="bottomright")   # legend top-left
 folium.TileLayer(
     tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     attr="Esri, HERE, Garmin, © OpenStreetMap contributors", name="Dark grey").add_to(m)
