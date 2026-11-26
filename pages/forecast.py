@@ -51,7 +51,7 @@ inputs = c1.multiselect("Extra inputs (exogenous variables)", list(INPUT_LABELS)
                         format_func=INPUT_LABELS.get)
 interval = c2.toggle("90% interval", value=False,
                      help="Two extra models with quantile loss (5% and 95%). In the notebook tests they covered "
-                          "about 87% of the actual values, but the band is wide because the errors add up week by week.")
+                          "about 92% of the actual values, but the band is wide because the errors add up week by week.")
 
 # --- Data and forecast -----------------------------------------------------------------------------
 train_end = (pd.Timestamp(train_month) + pd.offsets.MonthEnd(0)).normalize()
