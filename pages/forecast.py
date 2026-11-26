@@ -61,10 +61,8 @@ if external and train_end - pd.DateOffset(years=history_years) < pd.Timestamp("2
     st.info(f"Weather and exchange rates start in 2010, so the history is shortened to {history_years} years.")
 
 
-@st.cache_data(show_spinner=False)
-def run_forecast(area_type, number, train_end, history_years, horizon, p, d, q, sp, sd, sq, learning_rate,
-                 inputs, interval, _progress=None):
-    """Load the data and run the forecast (cached, so the same settings are only computed once)."""
+def load_inputs(area_type, number, inputs):
+    """Weekly filling (target) and the chosen extra inputs for the area. The downloads are cached in utils."""
     months_all = month_options()
     target = weekly_filling(fetch_reservoirs(months_all[0], months_all[-1]), area_type, number)
     exog = pd.DataFrame(index=target.index)
@@ -79,22 +77,34 @@ def run_forecast(area_type, number, train_end, history_years, horizon, p, d, q, 
     if currency_inputs:
         rates = fetch_exchange_rates("2010-01-01").resample("W-SUN").mean()   # same weeks as the reservoirs
         exog = exog.join(rates[currency_inputs])
-    return forecast_filling(target, exog if len(exog.columns) else None, train_end=train_end,
-                            history_years=history_years, horizon=horizon, p=p, d=d, q=q, sp=sp, sd=sd, sq=sq,
-                            use_season="season" in inputs, learning_rate=learning_rate, interval=interval,
-                            progress=_progress), target
+    return target, (exog if len(exog.columns) else None)
 
 
-bar = st.progress(0.0, text="Training the model ...")
+@st.cache_resource
+def finished_forecasts() -> dict:
+    """Forecasts that are already computed, shared between reruns and users (the training is the slow part).
+    Not st.cache_data, because the progress bar is updated while the model trains."""
+    return {}
+
+
+key = (area_type, number, train_end, history_years, horizon, p, d, q, sp, sd, sq, learning_rate, tuple(inputs), interval)
+store = finished_forecasts()
+bar = st.empty()                             # place for the progress bar
 try:
-    result, target = run_forecast(area_type, number, train_end, history_years, horizon, p, d, q, sp, sd, sq,
-                                  learning_rate, tuple(inputs), interval,
-                                  _progress=lambda f: bar.progress(f, text=f"Training the model ... {f:.0%}"))
+    target, exog = load_inputs(area_type, number, inputs)
+    if key not in store:
+        store[key] = forecast_filling(target, exog, train_end=train_end, history_years=history_years, horizon=horizon,
+                                      p=p, d=d, q=q, sp=sp, sd=sd, sq=sq, use_season="season" in inputs,
+                                      learning_rate=learning_rate, interval=interval,
+                                      progress=lambda f: bar.progress(f, text=f"Training the model ... {f:.0%}"))
+        if len(store) > 100:                 # keep the memory use small: forget the oldest forecast
+            store.pop(next(iter(store)))
 except Exception as error:
     bar.empty()
     st.error(f"The forecast could not be made: {error}")
     st.stop()
 bar.empty()
+result = store[key]
 
 # --- Results ---------------------------------------------------------------------------------------
 known = result["actual"].notna()
