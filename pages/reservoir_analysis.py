@@ -1,19 +1,24 @@
-"""Reservoirs - trends and seasons. Tab 1: STL decomposition, tab 2: spectrogram.
+"""Patterns & anomalies - trends and seasons. Tab 1: STL decomposition, tab 2: spectrogram.
 
-The area comes from the sidebar (shared with the other pages). STL and the spectrogram need many
-years of data, so this page uses the whole history since 1995 instead of the download interval slider.
+The area is the global choice (sidebar/map). STL and the spectrogram need many years of data,
+so this page uses the whole history since 1995.
 """
 
 import streamlit as st
 
 from analysis import spectrogram_figure, stl_figure, weekly_series
-from utils import area_controls, area_label, fetch_reservoirs, month_options
+from utils import area_label, current_area, fetch_reservoirs, month_options, page_header
 
-st.title("Trends and seasons")
+page_header("Patterns & anomalies", "Trends and seasons",
+            "STL decomposition and spectrogram of the weekly reservoir filling.")
 
-area_type, number = area_controls()          # sidebar: area type + one area
+area_type, number = current_area()
 months = month_options()
-df = fetch_reservoirs(months[0], months[-1])  # whole history (cached)
+try:
+    df = fetch_reservoirs(months[0], months[-1])  # whole history (cached)
+except Exception as error:
+    st.error(f"Could not download the reservoir data from NVE ({type(error).__name__}). Try again later.")
+    st.stop()
 series = weekly_series(df, area_type, number)
 st.caption(f"Weekly filling ratio for **{area_label(area_type, number)}**, "
            f"{series.index[0]:%Y} to {series.index[-1]:%Y}. The whole history is used, since both methods "

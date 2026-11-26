@@ -1,8 +1,9 @@
-"""Power exchange - cross-border flows in and out of Norway, read from MongoDB.
+"""Explore - cross-border flows in and out of Norway, read from MongoDB.
 
 Left column: radio for connection + selectbox for year -> pie chart.
 Right column: pills for months + filter for connections -> line plot per connection and direction.
-Expander at the bottom says where the data comes from.
+Expander at the bottom says where the data comes from. Connection and year are local choices,
+since they don't depend on the area chosen for the other pages.
 """
 
 import calendar
@@ -10,9 +11,9 @@ import calendar
 import plotly.express as px
 import streamlit as st
 
-from utils import CONNECTION_COLORS, DIRECTION_COLORS, EXPORT, IMPORT, load_flows
+from utils import CONNECTION_COLORS, DIRECTION_COLORS, EXPORT, IMPORT, load_flows, page_header
 
-st.title("Cross-border flows")
+page_header("Explore", "Cross-border flows", "Daily electricity flows between Norway and its neighbours.")
 
 try:
     flows = load_flows()   # daily values from MongoDB (cached)

@@ -1,0 +1,9 @@
+# App theme: dark background with the same blue as the plots.
+# The three page groups use their own accent colours (blue, orange, green), see utils.GROUPS.
+[theme]
+base = "dark"
+primaryColor = "#3987e5"
+backgroundColor = "#0f1720"
+secondaryBackgroundColor = "#1a2430"
+textColor = "#e6edf3"
+font = "sans serif"

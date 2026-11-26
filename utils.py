@@ -5,6 +5,10 @@ the weather locations come from MongoDB (saved there by the notebooks), and the 
 itself is downloaded from open-meteo.
 """
 
+import io
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import requests
@@ -77,44 +81,62 @@ def month_options() -> list[str]:
     return pd.period_range("1995-01", pd.Timestamp.today(), freq="M").astype(str).tolist()
 
 
-def reservoir_controls() -> tuple[str, str, str]:
-    """Sidebar controls used on both the Data table page and the Plot page."""
-    months = month_options()
-    # Remember the last choice, so it stays the same when you switch page
-    saved_type = st.session_state.get("saved_area_type", "NO")
-    saved_interval = st.session_state.get("saved_interval", (months[-24], months[-1]))
-
-    st.sidebar.header("Reservoir data")
-    area_type = st.sidebar.radio("Area type", list(AREA_TYPES), index=list(AREA_TYPES).index(saved_type),
-                                 format_func=AREA_TYPES.get)
-    # value is a tuple -> range slider (from, to). Default is the last two years
-    start, end = st.sidebar.select_slider("Download interval (months)", options=months, value=saved_interval)
-
-    st.session_state["saved_area_type"] = area_type
-    st.session_state["saved_interval"] = (start, end)
-    return area_type, start, end
-
-
 AREA_NUMBERS = {"NO": [0], "EL": [1, 2, 3, 4, 5], "VASS": [1, 2, 3]}
 
+# --- Global selections (session state) -------------------------------------------------------
+# The area is chosen once (in the sidebar or by clicking on the map) and used by all analysis pages.
 
-def area_controls() -> tuple[str, int]:
-    """Sidebar: area type + one area. Used by the analysis and weather pages.
 
-    It uses the same saved area type as the other reservoir pages, so the choice follows you around.
-    """
-    saved_type = st.session_state.get("saved_area_type", "NO")
+def _reset_area_number():
+    """When the area type changes, start with its first area."""
+    st.session_state["area_number"] = AREA_NUMBERS[st.session_state["area_type"]][0]
+
+
+def global_area_controls():
+    """Sidebar controls for the area, drawn by Home.py for every page that uses an area."""
+    # A click on the map stores a 'pending' area; it has to be applied before the widgets are drawn
+    pending = st.session_state.pop("pending_area", None)
+    if pending:
+        st.session_state["area_type"], st.session_state["area_number"] = pending
+    st.session_state.setdefault("area_type", "NO")
+    if st.session_state.get("area_number") not in AREA_NUMBERS[st.session_state["area_type"]]:
+        _reset_area_number()
+
     st.sidebar.header("Area")
-    area_type = st.sidebar.radio("Area type", list(AREA_TYPES), index=list(AREA_TYPES).index(saved_type),
-                                 format_func=AREA_TYPES.get)
-    numbers = AREA_NUMBERS[area_type]
-    saved_number = st.session_state.get("saved_area_number", numbers[0])
-    number = st.sidebar.selectbox("Area", numbers, index=numbers.index(saved_number) if saved_number in numbers else 0,
-                                  format_func=lambda n: area_label(area_type, n))
+    st.sidebar.radio("Area type", list(AREA_TYPES), format_func=AREA_TYPES.get, key="area_type",
+                     on_change=_reset_area_number)
+    st.sidebar.selectbox("Area", AREA_NUMBERS[st.session_state["area_type"]], key="area_number",
+                         format_func=lambda n: area_label(st.session_state["area_type"], n))
+    st.sidebar.caption("Tip: click an area on the Map page to select it.")
 
-    st.session_state["saved_area_type"] = area_type
-    st.session_state["saved_area_number"] = number
-    return area_type, number
+
+def current_area() -> tuple[str, int]:
+    """The area chosen in the sidebar or on the map (defaults to the whole country)."""
+    return st.session_state.get("area_type", "NO"), st.session_state.get("area_number", 0)
+
+
+def current_month() -> str:
+    """The month chosen on the map ("YYYY-MM"). The forecast page uses it as the end of the training data."""
+    return st.session_state.get("map_month", (pd.Timestamp.today() - pd.DateOffset(months=1)).strftime("%Y-%m"))
+
+
+# --- Page groups and headers -------------------------------------------------------------------
+GROUPS = {
+    "Explore": {"color": "blue", "hex": "#3987e5", "icon": ":material/explore:"},
+    "Patterns & anomalies": {"color": "orange", "hex": "#d95926", "icon": ":material/query_stats:"},
+    "Predict": {"color": "green", "hex": "#199e70", "icon": ":material/trending_up:"},
+}
+
+
+def page_header(group: str, title: str, intro: str | None = None):
+    """Coloured group badge + stripe and title, so it is easy to see which group is active."""
+    g = GROUPS[group]
+    st.markdown(f'<div style="height:4px;background:{g["hex"]};border-radius:2px;margin-bottom:0.6rem"></div>',
+                unsafe_allow_html=True)
+    st.markdown(f":{g['color']}-badge[{g['icon']} {group}]")
+    st.title(title)
+    if intro:
+        st.caption(intro)
 
 
 def region_code(area_type: str, area_number: int) -> str:
@@ -211,3 +233,57 @@ def download_weather(region: str, start: str, end: str, n_locations: int = N_LOC
     weather = pd.concat(frames, ignore_index=True)
     weather["time"] = pd.to_datetime(weather["time"])
     return weather
+
+
+WEEKLY_WEATHER = {"temperature": "Temperature (°C, weekly mean)", "precipitation": "Precipitation (mm per week)",
+                  "rain": "Rain (mm per week)", "snowfall": "Snowfall (cm per week)",
+                  "wind_speed": "Wind speed (km/h, mean of daily max)"}
+
+
+@st.cache_data(ttl=24 * 3600, show_spinner="Reading weekly weather from MongoDB ...")
+def load_weather_weekly() -> pd.DataFrame:
+    """Weekly weather per region since 2010, prepared in the part 4 notebook (weeks end on Sunday,
+    like Magasinstatistikk). Long histories like this are too slow to download live."""
+    docs = mongo_client()["ind320"]["weather_weekly"].find({}, {"_id": 0})
+    df = pd.DataFrame(list(docs))
+    if not df.empty:
+        df["week"] = pd.to_datetime(df["week"])
+    return df
+
+
+# --- Norges Bank exchange rates ------------------------------------------------------------------
+NB_API = "https://data.norges-bank.no/api/data/EXR/B.{currencies}.NOK.SP"
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner="Downloading exchange rates from Norges Bank ...")
+def fetch_exchange_rates(start: str = "2010-01-01", end: str | None = None, currencies=("EUR", "USD")) -> pd.DataFrame:
+    """Daily exchange rates (NOK per unit) from Norges Bank, one column per currency.
+
+    Business days only (no weekends/holidays), dates in Norwegian time (fixed at 14:15 CET).
+    """
+    params = {"format": "csv", "startPeriod": start, "locale": "en"}
+    if end:
+        params["endPeriod"] = end
+    response = requests.get(NB_API.format(currencies="+".join(currencies)), params=params, timeout=60)
+    response.raise_for_status()
+    df = pd.read_csv(io.StringIO(response.text), sep=";")
+    rates = df.pivot(index="TIME_PERIOD", columns="BASE_CUR", values="OBS_VALUE")
+    rates.index = pd.to_datetime(rates.index)
+    return rates.sort_index()
+
+
+# --- Map shapes ----------------------------------------------------------------------------------
+GEOJSON_FILES = {"NO": "country.geojson", "EL": "price_areas.geojson", "VASS": "water_areas.geojson"}
+
+
+@st.cache_data
+def load_geojson(area_type: str) -> dict:
+    """Area outlines as GeoJSON (converted from the NVE shapefiles in the part 4 notebook)."""
+    with open(Path(__file__).parent / "data" / "geojson" / GEOJSON_FILES[area_type], encoding="utf-8") as f:
+        return json.load(f)
+
+
+def weekly_filling(df: pd.DataFrame, area_type: str, area_number: int) -> pd.Series:
+    """Filling ratio for one area as a regular weekly series (the dates are Sundays)."""
+    area = df[(df["area_type"] == area_type) & (df["area_number"] == area_number)]
+    return area.set_index("date")["filling_ratio"].asfreq("W-SUN").interpolate()
