@@ -101,6 +101,9 @@ folium.TileLayer(
 folium.GeoJson(geo, style_function=style, highlight_function=lambda f: {"weight": 3, "color": "#ffffff"},
                tooltip=folium.GeoJsonTooltip(fields=["name", "value_text"], aliases=["Area", label])).add_to(m)
 colormap.add_to(m)
+# Light box behind the legend, so its dark text can be read on the dark basemap
+m.get_root().header.add_child(folium.Element(
+    "<style>.legend {background: rgba(255, 255, 255, 0.85); padding: 2px 8px; border-radius: 4px;}</style>"))
 
 left, right = st.columns([3, 1])
 with left:
